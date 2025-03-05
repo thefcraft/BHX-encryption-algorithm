@@ -84,11 +84,11 @@ Initial key material undergoes bcrypt hashing with automatically generated salts
 1. Validate password via bcrypt hash match
 2. Recompute HMAC over received ciphertext
 
-## Performance Characteristics
+<!-- ## Performance Characteristics
 
 **Throughput**  
 - 1.2 GB/s on AES-NI CPUs (streaming mode)
-- 380 MB/s (non-streaming with HMAC)
+- 380 MB/s (non-streaming with HMAC) -->
 
 **Memory Safety**  
 Zero heap allocations during stream processing with fixed 32-byte chunk sizes prevents memory exhaustion attacks.
