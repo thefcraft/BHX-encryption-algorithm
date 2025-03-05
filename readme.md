@@ -73,7 +73,7 @@ assert data == decrypted
 ## Security Design
 
 **Key Strengthening**  
-Initial key material undergoes bcrypt hashing with automatically generated salts, requiring ~250ms per derivation on modern CPUs to resist brute-force attacks[2].
+Initial key material undergoes bcrypt hashing with automatically generated salts, requiring ~250ms per derivation on modern CPUs to resist brute-force attacks.
 
 **Ciphertext Structure**  
 ```
