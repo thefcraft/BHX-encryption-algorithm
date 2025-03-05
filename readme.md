@@ -7,7 +7,7 @@ BlockHashXOR (BHX) implements a cryptographically secure encryption system combi
 ### Core Components
 BHX operates through three integrated cryptographic subsystems:
 1. **Key Derivation**: bcrypt(password, SHA256(key)) with 16-round salt
-2. **Stream Generation**: $$ \text{SHA256}(K_n + K_{master} + IV + C_n + \text{counter}) $$ per 32-byte block
+2. **Stream Generation**: $K_{n+1} = \text{SHA256}(K_n + K_{master} + IV + C_n + \text{counter})$ per 32-byte block
 3. **Integrity Protection**: HMAC-SHA256 over all ciphertext blocks
 
 The algorithm supports two operational modes - full-message encryption with atomic HMAC verification and chunked streaming for real-time communication protocols.
@@ -16,7 +16,7 @@ The algorithm supports two operational modes - full-message encryption with atom
 
 **Confidentiality Assurance**  
 Implements perfect forward secrecy through hash-based key evolution where each 32-byte block uses a new key derived via:
-$$ K_{n+1} = \text{SHA256}(K_n + K_{master} + IV + C_n + \text{counter}) $$
+$K_{n+1} = \text{SHA256}(K_n + K_{master} + IV + C_n + \text{counter})$
 This ensures compromised block keys don't reveal previous/future blocks.
 
 **Authentication Mechanisms**  
