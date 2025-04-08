@@ -2,9 +2,9 @@ import secrets
 from hashlib import sha256
 import hmac
 import bcrypt
-
+# TODO: for the config i mean use_bcrypt and use_hmac etc i can use first few bits to store it 
 class BHX:
-    def __init__(self, key) -> None:
+    def __init__(self, key, use_bcrypt: bool = False, use_hmac: bool = False) -> None:
         self.key = sha256(key).digest()
         # Streaming state variables
         self.is_encrypting = False
@@ -12,6 +12,9 @@ class BHX:
         self.current_newkey = None
         self.counter = 0
         self.IV = None
+
+        self.use_bcrypt = use_bcrypt # first 60 bytes used to store bcrypt hashed password
+        self.use_hmac = use_hmac # last 32 byte for store hmac [NOTE that it is not used in the stream mode]
 
     @classmethod
     def from_random_key(cls, key_len=32):
@@ -28,8 +31,9 @@ class BHX:
     def encrypt(self, data: bytes) -> bytearray:
         """Encrypt data and append an HMAC for integrity (non-streaming)."""
         result = bytearray()
-        hashed_key = bcrypt.hashpw(sha256(self.key).digest(), bcrypt.gensalt())
-        result.extend(hashed_key)  # 60 bytes
+        if self.use_bcrypt:
+            hashed_key = bcrypt.hashpw(sha256(self.key).digest(), bcrypt.gensalt())
+            result.extend(hashed_key)  # 60 bytes
 
         IV = secrets.token_bytes(16)
         initial_chunk = IV
@@ -41,24 +45,34 @@ class BHX:
             result.extend(self.encrypt_chunk(chunk, newkey))
             newkey = self.new_key(newkey, self.key, IV, chunk, counter=counter)
 
-        hmac_value = hmac.new(self.key, result, sha256).digest()
-        result.extend(hmac_value)  # Append 32-byte HMAC
+        if self.use_hmac:
+            hmac_value = hmac.new(self.key, result, sha256).digest()
+            result.extend(hmac_value)  # Append 32-byte HMAC
         return bytes(result)
 
     def decrypt(self, data: bytes) -> bytes:
         """Decrypt data with HMAC verification (non-streaming)."""
         result = bytearray()
-        hashed_sha_key, data, received_hmac = data[:60], data[60:-32], data[-32:]
-        if not bcrypt.checkpw(sha256(self.key).digest(), hashed_sha_key):
-            raise ValueError("Wrong password.")
+        if self.use_bcrypt and self.use_hmac:
+            hashed_sha_key, data, received_hmac = data[:60], data[60:-32], data[-32:]
+            if not bcrypt.checkpw(sha256(self.key).digest(), hashed_sha_key):
+                raise ValueError("Wrong password.")
+        elif self.use_bcrypt and not self.use_hmac:
+            hashed_sha_key, data = data[:60], data[60:]
+        elif not self.use_bcrypt and self.use_hmac:
+            data, received_hmac = data[:-32], data[-32:]
 
         initial_chunk = data[:16]
         IV = self.encrypt_chunk(initial_chunk, self.key)
         newkey = self.new_key(self.key, self.key, IV, IV, counter=0)
 
-        computed_hmac = hmac.new(self.key, hashed_sha_key + self.encrypt_chunk(IV, self.key) + data[16:], sha256).digest()
-        if not secrets.compare_digest(received_hmac, computed_hmac):
-            raise ValueError("HMAC verification failed: Data may have been tampered with.")
+        if self.use_hmac:
+            if self.use_bcrypt:
+                computed_hmac = hmac.new(self.key, hashed_sha_key + self.encrypt_chunk(IV, self.key) + data[16:], sha256).digest()
+            else:
+                computed_hmac = hmac.new(self.key, self.encrypt_chunk(IV, self.key) + data[16:], sha256).digest()
+            if not secrets.compare_digest(received_hmac, computed_hmac):
+                raise ValueError("HMAC verification failed: Data may have been tampered with.")
 
         for counter, i in enumerate(range(16, len(data), 32), start=1):
             chunk = data[i:i+32]
@@ -72,7 +86,8 @@ class BHX:
         """Initialize streaming encryption, returning hashed_key and encrypted IV."""
         if self.is_encrypting or self.is_decrypting:
             raise ValueError("Already in a streaming session")
-        hashed_key = bcrypt.hashpw(sha256(self.key).digest(), bcrypt.gensalt())
+        if self.use_bcrypt:
+            hashed_key = bcrypt.hashpw(sha256(self.key).digest(), bcrypt.gensalt())
         IV = secrets.token_bytes(16)
         initial_chunk = IV
         initial_chunk = self.encrypt_chunk(initial_chunk, self.key)
@@ -80,7 +95,9 @@ class BHX:
         self.counter = 0
         self.current_newkey = self.new_key(self.key, self.key, IV, IV, counter=0)
         self.is_encrypting = True
-        return hashed_key + initial_chunk
+        if self.use_bcrypt:
+            return hashed_key + initial_chunk
+        return initial_chunk
     
     def encrypt_chunk_stream(self, chunk: bytes) -> bytes:
         """Encrypt a single chunk in streaming mode."""
@@ -97,9 +114,10 @@ class BHX:
         """Initialize streaming decryption with key verification."""
         if self.is_encrypting or self.is_decrypting:
             raise ValueError("Already in a streaming session")
-        hashed_sha_key, initial_chunk = initial_chunk[:60], initial_chunk[60:]
-        if not bcrypt.checkpw(sha256(self.key).digest(), hashed_sha_key):
-            raise ValueError("Wrong key")
+        if self.use_bcrypt: # BTW We can check this based on initial chunk size
+            hashed_sha_key, initial_chunk = initial_chunk[:60], initial_chunk[60:]
+            if not bcrypt.checkpw(sha256(self.key).digest(), hashed_sha_key):
+                raise ValueError("Wrong key")
     
         IV = self.encrypt_chunk(initial_chunk, self.key)
         self.IV = IV
@@ -125,4 +143,3 @@ class BHX:
         self.current_newkey = None
         self.counter = 0
         self.IV = None
-    
