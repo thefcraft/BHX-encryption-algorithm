@@ -59,11 +59,11 @@ class TestStream(unittest.TestCase):
         key = b"test key"
         wrong_key = b"wrong key"
         plaintext = b"Hello"
-        encrypter = BHX(key=key)
+        encrypter = BHX(key=key, use_bcrypt=True)
         initial_chunk = encrypter.start_encrypt_stream()
         encrypter.encrypt_chunk_stream(plaintext)
         encrypter.reset_stream()
-        decrypter = BHX(key=wrong_key)
+        decrypter = BHX(key=wrong_key, use_bcrypt=True)
         with self.assertRaises(ValueError):
             decrypter.start_decrypt_stream(initial_chunk)
 
@@ -89,18 +89,24 @@ class TestStream(unittest.TestCase):
         key = b"test key"
         wrong_key = b"wrong key"
         plaintext = b"Hello, World!"
-        encrypter = BHX(key=key)
+        encrypter = BHX(key=key, use_hmac=True)
         encrypted_data = encrypter.encrypt(plaintext)
-        decrypter = BHX(key=wrong_key)
+        decrypter = BHX(key=wrong_key, use_hmac=True)
+        with self.assertRaises(ValueError):
+            decrypter.decrypt(encrypted_data)
+        
+        encrypter = BHX(key=key, use_bcrypt=True)
+        encrypted_data = encrypter.encrypt(plaintext)
+        decrypter = BHX(key=wrong_key, use_bcrypt=True)
         with self.assertRaises(ValueError):
             decrypter.decrypt(encrypted_data)
 
     def test_non_streaming_tampered_data(self):
         key = b"test key"
         plaintext = b"Hello, World!"
-        encrypter = BHX(key=key)
+        encrypter = BHX(key=key, use_hmac=True)
         encrypted_data = encrypter.encrypt(plaintext)
         tampered_data = encrypted_data[:-32] + b'\x00' * 32  # Replace HMAC
-        decrypter = BHX(key=key)
+        decrypter = BHX(key=key, use_hmac=True)
         with self.assertRaises(ValueError):
             decrypter.decrypt(tampered_data)

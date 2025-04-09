@@ -2,9 +2,9 @@ import secrets
 from hashlib import sha256
 import hmac
 import bcrypt
-# TODO: for the config i mean use_bcrypt and use_hmac etc i can use first few bits to store it 
+# TODO: for the config i mean use_bcrypt and use_hmac etc we can use first few bits to store flags 
 class BHX:
-    def __init__(self, key, use_bcrypt: bool = False, use_hmac: bool = False) -> None:
+    def __init__(self, key, use_bcrypt: bool = False, use_hmac: bool = False, use_new_key_depends_on_old_key: bool = True) -> None:
         self.key = sha256(key).digest()
         # Streaming state variables
         self.is_encrypting = False
@@ -15,6 +15,7 @@ class BHX:
 
         self.use_bcrypt = use_bcrypt # first 60 bytes used to store bcrypt hashed password
         self.use_hmac = use_hmac # last 32 byte for store hmac [NOTE that it is not used in the stream mode]
+        self.use_new_key_depends_on_old_key = use_new_key_depends_on_old_key # if false then seeking left and right is possible and initial key is only required to decrypt the data if we know the counter
 
     @classmethod
     def from_random_key(cls, key_len=32):
@@ -43,7 +44,10 @@ class BHX:
         for counter, i in enumerate(range(0, len(data), 32), start=1):
             chunk = data[i:i+32]
             result.extend(self.encrypt_chunk(chunk, newkey))
-            newkey = self.new_key(newkey, self.key, IV, chunk, counter=counter)
+            if self.use_new_key_depends_on_old_key:
+                newkey = self.new_key(newkey, self.key, IV, chunk, counter=counter)
+            else:
+                newkey = self.new_key(self.key, self.key, IV, IV, counter=counter)
 
         if self.use_hmac:
             hmac_value = hmac.new(self.key, result, sha256).digest()
@@ -59,6 +63,8 @@ class BHX:
                 raise ValueError("Wrong password.")
         elif self.use_bcrypt and not self.use_hmac:
             hashed_sha_key, data = data[:60], data[60:]
+            if not bcrypt.checkpw(sha256(self.key).digest(), hashed_sha_key):
+                raise ValueError("Wrong password.")
         elif not self.use_bcrypt and self.use_hmac:
             data, received_hmac = data[:-32], data[-32:]
 
@@ -78,7 +84,10 @@ class BHX:
             chunk = data[i:i+32]
             decrypted = self.encrypt_chunk(chunk, newkey)
             result.extend(decrypted)
-            newkey = self.new_key(newkey, self.key, IV, decrypted, counter=counter)
+            if self.use_new_key_depends_on_old_key:
+                newkey = self.new_key(newkey, self.key, IV, decrypted, counter=counter)
+            else:
+                newkey = self.new_key(self.key, self.key, IV, IV, counter=counter)
         return bytes(result)
 
     ### Streaming Methods ###
@@ -107,7 +116,10 @@ class BHX:
             raise ValueError("Chunk size must be <= 32 bytes")
         self.counter += 1
         encrypted_chunk = self.encrypt_chunk(chunk, self.current_newkey)
-        self.current_newkey = self.new_key(self.current_newkey, self.key, self.IV, chunk, counter=self.counter)
+        if self.use_new_key_depends_on_old_key:
+            self.current_newkey = self.new_key(self.current_newkey, self.key, self.IV, chunk, counter=self.counter)
+        else:
+            self.current_newkey = self.new_key(self.key, self.key, self.IV, self.IV, counter=self.counter)
         return encrypted_chunk
 
     def start_decrypt_stream(self, initial_chunk: bytes):
@@ -133,7 +145,10 @@ class BHX:
             raise ValueError("Chunk size must be <= 32 bytes")
         self.counter += 1
         decrypted = self.encrypt_chunk(chunk, self.current_newkey)
-        self.current_newkey = self.new_key(self.current_newkey, self.key, self.IV, decrypted, self.counter)
+        if self.use_new_key_depends_on_old_key:
+            self.current_newkey = self.new_key(self.current_newkey, self.key, self.IV, decrypted, self.counter)
+        else:
+            self.current_newkey = self.new_key(self.key, self.key, self.IV, self.IV, self.counter)
         return decrypted
 
     def reset_stream(self):

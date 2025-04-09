@@ -17,11 +17,20 @@ class TestBasic(unittest.TestCase):
         key = b"very safe password" # must be safe
         original_data = b''
         
-        encrypter = BHX(key=key)
+        encrypter = BHX(key=key, use_bcrypt=True)
         encrypted_data = encrypter.encrypt(original_data)
         
         try:
-            decrypter = BHX(key=b"wrong password")    
+            decrypter = BHX(key=b"wrong password", use_bcrypt=True)    
+            decrypted_data = decrypter.decrypt(encrypted_data)
+        except ValueError as e:
+            return
+        
+        encrypter = BHX(key=key, use_hmac=True)
+        encrypted_data = encrypter.encrypt(original_data)
+        
+        try:
+            decrypter = BHX(key=b"wrong password", use_hmac=True)    
             decrypted_data = decrypter.decrypt(encrypted_data)
         except ValueError as e:
             return
