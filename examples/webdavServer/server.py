@@ -56,6 +56,9 @@ class CustomFolderResource(FolderResource):
         # names = super().get_member_names()
         # return [decode_filename(self.bhx, name) for name in names]
     
+    def get_display_name(self):
+        return decode_filename(self.bhx, self.name)
+    
     def get_member(self, name: str) -> CustomFileResource:
         assert util.is_str(name), f"{name!r}"
         fp = os.path.join(self._file_path, util.to_str(name))
