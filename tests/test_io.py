@@ -32,7 +32,7 @@ class TestBHXio(unittest.TestCase):
         fe.seek(0)
         
         decrypter = BHX(key=key, use_new_key_depends_on_old_key=False, use_bcrypt=False, use_hmac=False)   
-        with BHXStreamReader(fe, bhx=decrypter) as fr:
+        with BHXBytesIOReader(fe, bhx=decrypter) as fr:
             decrypted_data = fr.read()
             fr.seek(-24, SEEK_CUR)
             decrypted_data = decrypted_data[:-24] + fr.read()
