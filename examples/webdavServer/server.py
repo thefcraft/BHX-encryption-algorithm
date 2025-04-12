@@ -164,8 +164,22 @@ def run_server(shared_dir: str, readonly: bool = False, host: str = "0.0.0.0", p
     
     app = WsgiDAVApp(config)
     server = wsgi.Server((config["host"], config["port"]), app)
-
-    print(f"Starting WsgiDAV server on {config['host']}:{config['port']}...")
+    print("Starting WsgiDAV server on:")
+    print(f"\thttp://{host}:{port}")
+    try:
+        import psutil, socket
+        # Use psutil to get all network interfaces and IPs
+        for interface, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                if addr.family == socket.AF_INET and not addr.address.startswith("127."):
+                    print(f"\thttp://{addr.address}:{port} ({interface})")
+    except Exception as e:
+        import warnings
+        warnings.warn(
+            f"error while printing ip addrs (try install psutil), Error: {e}",
+            Warning,
+            stacklevel=0
+        )
     try:
         server.start()
     except KeyboardInterrupt:
