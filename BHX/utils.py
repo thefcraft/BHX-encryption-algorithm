@@ -91,9 +91,9 @@ def safe_encode(data: bytes) -> str:
 def safe_decode(data: str) -> bytes:
     return _default_Base256toN.decode(data.encode(errors='ignore'))
 
-def encode_filename(bhx: BHX, filename: Union[str, bytes]) -> str:
+def encode_filename(bhx: BHX, filename: Union[str, bytes], fixed_encoding_unsafe: bool = True) -> str:
     if isinstance(filename, str): filename = filename.encode(errors='ignore')
-    name = bhx.encrypt(filename, use_iv=sha256(bhx.key).digest())
+    name = bhx.encrypt(filename, use_iv=sha256(bhx.key).digest() if fixed_encoding_unsafe else None)
     return f"{safe_encode(name)}.enc"
 
 def decode_filename(bhx: BHX, filename: Union[str, bytes]) -> str:

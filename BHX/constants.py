@@ -1,0 +1,1 @@
+BATCH_SIZE = 32*1024*32 # batch size for io before write and read unit was 32 bytes => (32*1024:=1MB)*32 = 32 MB

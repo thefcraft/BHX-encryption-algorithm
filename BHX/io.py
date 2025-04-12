@@ -3,7 +3,7 @@ from typing import Literal, BinaryIO, Optional, Generator, Union, Any, Tuple, It
 from io import BufferedWriter, BufferedReader, RawIOBase, SEEK_CUR, SEEK_SET, SEEK_END, BytesIO
 from .bhx import BHX
 from .utils import deprecated
-
+from .constants import BATCH_SIZE
 # from itertools import islice
 
 # def batched(iterable, n):
@@ -119,14 +119,13 @@ class BHXByteIO(BytesIO):
 
         indices = range(0, len(data)-32, 32)
         total_chunks = len(indices)
-        batch_size = 32*1024
-        for batch_start in range(0, total_chunks, batch_size):
-            len_current_chunk = min(batch_size, total_chunks - batch_start)
+        for batch_start in range(0, total_chunks, BATCH_SIZE):
+            len_current_chunk = min(BATCH_SIZE, total_chunks - batch_start)
             chunks_start_idx = indices[batch_start]
             next_chunk_start_idx = chunks_start_idx + len_current_chunk*32
-            chunk_idx = batch_start // batch_size
+            chunk_idx = batch_start // BATCH_SIZE
             
-            curr_counter_start = counter+(chunk_idx*batch_size)
+            curr_counter_start = counter+(chunk_idx*BATCH_SIZE)
             # current_newkey = bytearray(b''.join(
             #     BHX.new_key(self._key, self._key, self._IV, self._IV, curr_counter) 
             #     for curr_counter in range(curr_counter_start, curr_counter_start+len_current_chunk)
@@ -191,14 +190,13 @@ class BHXByteIO(BytesIO):
             
         indices = range(32, len(encrypted_data), 32)
         total_chunks = len(indices)
-        batch_size = 32*1024
-        for batch_start in range(0, total_chunks, batch_size):
-            len_current_chunk = min(batch_size, total_chunks - batch_start)
+        for batch_start in range(0, total_chunks, BATCH_SIZE):
+            len_current_chunk = min(BATCH_SIZE, total_chunks - batch_start)
             chunks_start_idx = indices[batch_start]
             next_chunk_start_idx = chunks_start_idx + len_current_chunk*32
-            chunk_idx = batch_start // batch_size
+            chunk_idx = batch_start // BATCH_SIZE
             
-            curr_counter_start = counter+(chunk_idx*batch_size)
+            curr_counter_start = counter+(chunk_idx*BATCH_SIZE)
             # current_newkey = bytearray(b''.join(
             #     BHX.new_key(self._key, self._key, self._IV, self._IV, curr_counter) 
             #     for curr_counter in range(curr_counter_start, curr_counter_start+len_current_chunk)

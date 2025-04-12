@@ -18,6 +18,9 @@ from BHX.logger import monitor__get__attributes__
 # BHXBytesIOWriter.__getattribute__ = monitor__get__attributes__
 # BHXStreamWriter.__getattribute__ = monitor__get__attributes__
 
+# TODO: we can load all current files [listdir] then get original name insted of replacing iv with sha256...
+# TODO: just change _loc_to_file_path / encode_filename... also cache them if we want...
+
 # bhx_password = b'safe key' # for later use the user password
 # if you wrote right password then only you can see the data
 # TODO readonly acess for wrong password ?
@@ -93,7 +96,7 @@ class CustomFolderResource(FolderResource):
 class CustomFilesystemProvider(FilesystemProvider):
     def __init__(self, root_folder, *, readonly=False, fs_opts=None):
         super().__init__(root_folder, readonly=readonly, fs_opts=fs_opts)
-    def _loc_to_file_path(self, path: str, environ: dict = None):
+    def _loc_to_file_path(self, path: str, environ: dict = None) -> str:
         bhx_password:str = environ['wsgidav.customauth.password']
         bhx = BHX(key=bhx_password.encode(), use_new_key_depends_on_old_key=False, use_bcrypt=False, use_hmac=False)
         root_path = self.root_folder_path
@@ -102,7 +105,7 @@ class CustomFilesystemProvider(FilesystemProvider):
         assert util.is_str(path)
         path_parts = path.strip("/").split("/")
         
-        path_parts = [encode_filename(bhx, part) if part != '' else part for part in path_parts]
+        path_parts = [encode_filename(bhx, part, fixed_encoding_unsafe=True) if part != '' else part for part in path_parts]
         
         file_path = os.path.abspath(os.path.join(root_path, *path_parts))
         if not file_path.startswith(root_path):

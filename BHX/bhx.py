@@ -78,7 +78,7 @@ class BHX:
         if self.use_bcrypt:
             hashed_key = bcrypt.hashpw(sha256(self.key).digest(), bcrypt.gensalt())
             result.extend(hashed_key)  # 60 bytes
-        if use_iv == Ellipsis:
+        if use_iv == Ellipsis or use_iv == None:
             IV = secrets.token_bytes(16)
         else:
             IV = bytes(islice(cycle(use_iv), 16))
