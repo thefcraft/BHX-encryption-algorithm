@@ -4,6 +4,7 @@ import hmac
 import bcrypt
 from typing import Optional, Union
 from itertools import cycle, islice
+import numpy as np
 
 # TODO: for the config i mean use_bcrypt and use_hmac etc we can use first few bits to store flags 
 class BHX:
@@ -31,6 +32,38 @@ class BHX:
     @staticmethod
     def new_key(old_key: bytes, initial_key, IV: bytes, data_last: bytes, counter: int) -> bytes:
         return sha256(old_key + initial_key + IV + data_last + counter.to_bytes(4, 'big')).digest()
+    
+    # @staticmethod
+    # def encrypt_chunk_longer_little_unsafe(base: bytes, counter_start: int, counter_end: int, chunk: bytes) -> bytes:
+    #     """may be longer the 32"""
+    #     decrypted_data = bytearray()
+    #     hasher_base = sha256()
+    #     hasher_base.update(base)
+    #     for curr_counter in range(counter_start, counter_end):
+    #         hasher = hasher_base.copy()
+    #         hasher.update(curr_counter.to_bytes(4, 'big'))
+    #         idx = curr_counter-counter_start
+    #         decrypted_data.extend(bytes(a ^ b for a, b in zip(chunk[idx:idx+32], hasher.digest())))
+    #     return decrypted_data
+    
+    @staticmethod
+    def encrypt_chunk_longer_little_unsafe(base: bytes, counter_start: int, counter_end: int, chunk: bytes) -> bytes:
+        """Optimized version that processes data more efficiently"""
+        # Precompute all hash values
+        hash_values = bytearray()
+        hasher_base = sha256()
+        hasher_base.update(base)
+
+        # Create all hash values at once
+        for curr_counter in range(counter_start, counter_end):
+            hasher = hasher_base.copy()
+            hasher.update(curr_counter.to_bytes(4, 'big'))
+            hash_values.extend(hasher.digest())
+
+        # Convert to NumPy arrays for faster processing
+        hash_array = np.frombuffer(hash_values[:len(chunk)], dtype=np.uint8)
+        chunk_array = np.frombuffer(chunk, dtype=np.uint8)
+        return (hash_array ^ chunk_array).tobytes()
 
     def encrypt(self, data: bytes, use_iv: bytes = ...) -> bytearray:
         """Encrypt data and append an HMAC for integrity (non-streaming)."""
@@ -164,3 +197,6 @@ class BHX:
         self.counter = 0
         self.IV = None
 
+    @staticmethod
+    def random_iv(size: int = 16):
+        return secrets.token_bytes(size)

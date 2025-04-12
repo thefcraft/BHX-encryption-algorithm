@@ -1,3 +1,5 @@
+import logging #; logging.basicConfig(level=logging.DEBUG)
+
 from cheroot import wsgi
 import stat
 from wsgidav import util
@@ -7,15 +9,17 @@ from wsgidav.fs_dav_provider import FilesystemProvider, FileResource, FolderReso
 import os, shutil, sys
 from typing import List
 from BHX import BHX, decode_filename, encode_filename
-from BHX.io import BHXBytesIOReader, BHXStreamWriter
+from BHX.io import BHXByteIO#, BHXBytesIOWriter, BHXStreamWriter
 from BHX.logger import monitor__get__attributes__
 
-BHXBytesIOReader.__getattribute__ = monitor__get__attributes__
-BHXStreamWriter.__getattribute__ = monitor__get__attributes__
+BHXByteIO.__getattribute__ = monitor__get__attributes__
+# BHXBytesIOWriter.__getattribute__ = monitor__get__attributes__
+# BHXStreamWriter.__getattribute__ = monitor__get__attributes__
 
 bhx_password = b'safe key' # for later use the user password
 
-shared_dir = os.path.join(os.path.dirname(__file__), 'shared_dir')
+shared_dir = os.path.join(os.path.dirname(__file__), 'shared_dir_tmp')
+if not os.path.exists(shared_dir): os.mkdir(shared_dir)
 
 class CustomFileResource(FileResource):
     def __init__(self, path, environ, file_path):
@@ -38,13 +42,14 @@ class CustomFileResource(FileResource):
     
     def get_content(self):
         assert not self.is_collection
-        return BHXBytesIOReader(open(self._file_path, "rb", BUFFER_SIZE), bhx=self.bhx, close_file_on_close=True)
+        return BHXByteIO(open(self._file_path, "r+b", BUFFER_SIZE), bhx=self.bhx, close_file_on_close=True)
     
     def begin_write(self, *, content_type=None):
         assert not self.is_collection
         if self.provider.readonly:
             raise DAVError(HTTP_FORBIDDEN)
-        return BHXStreamWriter(open(self._file_path, 'wb', BUFFER_SIZE), bhx=self.bhx, close_file_on_close=True)
+        return BHXByteIO(open(self._file_path, 'w+b', BUFFER_SIZE), bhx=self.bhx, close_file_on_close=True)
+        # return BHXStreamWriter(open(self._file_path, 'wb', BUFFER_SIZE), bhx=self.bhx, close_file_on_close=True)
         # return open(r"C:\ThefCraft\thefcraft-github\ftp-server-client-for-tfbin\abc.txt", "wb", BUFFER_SIZE)
     
 class CustomFolderResource(FolderResource):
@@ -78,7 +83,7 @@ class CustomFolderResource(FolderResource):
             raise DAVError(HTTP_FORBIDDEN)
         path = util.join_uri(self.path, name)
         fp = self.provider._loc_to_file_path(path, self.environ)
-        f = BHXStreamWriter(open(fp, "wb"), bhx=self.bhx, close_file_on_close=True)
+        f = BHXByteIO(open(fp, "w+b"), bhx=self.bhx, close_file_on_close=True)
         f.close()
         return self.provider.get_resource_inst(path, self.environ)
      
@@ -114,7 +119,7 @@ class CustomFilesystemProvider(FilesystemProvider):
         return CustomFileResource(path, environ, fp)
 
 config = {
-    "host": "127.0.0.1",
+    "host": "0.0.0.0",
     "port": 8080,
     "provider_mapping": {
         "/": CustomFilesystemProvider(shared_dir, readonly=False) # for now readonly
@@ -123,7 +128,7 @@ config = {
     "simple_dc": {
         "user_mapping": {"*": True} # Anonymous access
     },  
-    "verbose": 1,
+    "verbose": logging.DEBUG,
 }
 
 def run_server():

@@ -1,5 +1,5 @@
 import unittest
-from . import BHX, BHXStreamWriter, BHXStreamReader, BHXBytesIOReader
+from . import BHX, BHXStreamWriter, BHXStreamReader, BHXBytesIOReader, BHXByteIO  
 
 from io import BytesIO, SEEK_CUR, SEEK_END, SEEK_SET
 import random
@@ -112,4 +112,85 @@ class TestBHXio(unittest.TestCase):
                 fr.seek(start)
                 mid = fr.read(end)
                 assert mid == original_data[start:start + end], f'{start}:{end}'
-                
+
+class TestBHXBytesIO(unittest.TestCase):
+    @staticmethod
+    def simulate_writes(ops, initial_size=0):
+        buf = bytearray(b'\x00' * initial_size)
+        for pos, data in ops:
+            end_pos = pos + len(data)
+            if end_pos > len(buf):
+                buf.extend(b'\x00' * (end_pos - len(buf)))
+            buf[pos:end_pos] = data
+        return bytes(buf)
+    
+    def setUp(self):
+        self.key = b'safe key'
+        self.bhx = BHX(key=self.key, use_new_key_depends_on_old_key=False)
+
+    def test_basic_round_trip(self):
+        original = b"The quick brown fox jumps over the lazy dog."
+        with BytesIO() as stream:
+            with BHXByteIO(stream, bhx=self.bhx) as f:
+                f.write(original)
+                f.seek(0)
+                read = f.read()
+        self.assertEqual(read, original)
+
+    def test_seek_and_partial_overwrite(self):
+        with BytesIO() as stream:
+            with BHXByteIO(stream, bhx=self.bhx) as f:
+                f.write(b"abcdefghij")   # Write 10 bytes
+                f.seek(3)
+                f.write(b"XYZ")         # Overwrite 'def' with 'XYZ'
+                f.seek(0)
+                result = f.read()
+        self.assertEqual(result, b"abcXYZghij")
+
+    def test_multiple_seeks_and_writes(self):
+        with BytesIO() as stream:
+            with BHXByteIO(stream, bhx=self.bhx) as f:
+                f.write(b"Start-")
+                f.seek(6)
+                f.write(b"Middle-")
+                f.seek(0, 2)  # Seek to end
+                f.write(b"End")
+                f.seek(0)
+                result = f.read()
+        self.assertEqual(result, b"Start-Middle-End")
+
+    def test_random_access_writes(self):
+        random.seed(42)
+        ops = []
+        for _ in range(10):
+            pos = random.randint(0, 100)
+            data = bytes(random.getrandbits(8) for _ in range(random.randint(4, 12)))
+            ops.append((pos, data))
+        expected = self.simulate_writes(ops)
+        with BytesIO() as stream:
+            with BHXByteIO(stream, bhx=self.bhx) as f:
+                for pos, data in ops:
+                    f.seek(pos)
+                    f.write(data)
+                f.seek(0)
+                result = f.read()
+        self.assertEqual(result, expected)
+
+    def test_no_write(self):
+        with BytesIO() as stream:
+            with BHXByteIO(stream, bhx=self.bhx):
+                pass  # No writes
+            stream.seek(0)
+            with BHXByteIO(stream, bhx=self.bhx) as f:
+                data = f.read()
+        self.assertEqual(data, b"")
+
+    def test_write_past_end(self):
+        with BytesIO() as stream:
+            with BHXByteIO(stream, bhx=self.bhx) as f:
+                f.seek(10)  # Seek beyond start
+                f.write(b"xyz")
+                f.seek(0)
+                result = f.read()
+        self.assertEqual(result, b"\x00" * 10 + b"xyz")
+

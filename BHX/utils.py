@@ -4,6 +4,10 @@ from .bhx import BHX
 from hashlib import sha256
 import os
 
+import warnings
+import functools
+
+
 class Base256toN:
     def __init__(self, valid_char: str = (
         string.ascii_lowercase + 
@@ -96,3 +100,39 @@ def decode_filename(bhx: BHX, filename: Union[str, bytes]) -> str:
     if not isinstance(filename, str): filename = filename.decode()
     name = safe_decode(filename.removesuffix(".enc"))
     return bhx.decrypt(name).decode()
+
+
+def deprecated(reason="This function is deprecated"):
+    def decorator(obj):
+        # If it's a class
+        if isinstance(obj, type):
+            orig_init = obj.__init__
+
+            @functools.wraps(orig_init)
+            def new_init(self, *args, **kwargs):
+                warnings.warn(
+                    f"{obj.__name__} is deprecated: {reason}",
+                    DeprecationWarning,
+                    stacklevel=2
+                )
+                return orig_init(self, *args, **kwargs)
+
+            obj.__init__ = new_init
+            return obj
+
+        # If it's a function or method
+        elif callable(obj):
+            @functools.wraps(obj)
+            def wrapper(*args, **kwargs):
+                warnings.warn(
+                    f"{obj.__name__} is deprecated: {reason}",
+                    DeprecationWarning,
+                    stacklevel=2
+                )
+                return obj(*args, **kwargs)
+
+            return wrapper
+
+        else:
+            raise TypeError("Unsupported type for @deprecated")
+    return decorator
