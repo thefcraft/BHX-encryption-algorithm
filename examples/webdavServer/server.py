@@ -4,26 +4,28 @@ from cheroot import wsgi
 import stat
 from wsgidav import util
 from wsgidav.wsgidav_app import WsgiDAVApp
-from wsgidav.dav_error import HTTP_FORBIDDEN, DAVError
+from wsgidav.dav_error import HTTP_FORBIDDEN, DAVError, HTTP_UNAUTHORIZED
 from wsgidav.fs_dav_provider import FilesystemProvider, FileResource, FolderResource, BUFFER_SIZE
+from wsgidav.dc.base_dc import BaseDomainController
+
 import os, shutil, sys
 from typing import List
 from BHX import BHX, decode_filename, encode_filename
 from BHX.io import BHXByteIO#, BHXBytesIOWriter, BHXStreamWriter
 from BHX.logger import monitor__get__attributes__
 
-BHXByteIO.__getattribute__ = monitor__get__attributes__
+# BHXByteIO.__getattribute__ = monitor__get__attributes__
 # BHXBytesIOWriter.__getattribute__ = monitor__get__attributes__
 # BHXStreamWriter.__getattribute__ = monitor__get__attributes__
 
-bhx_password = b'safe key' # for later use the user password
-
-shared_dir = os.path.join(os.path.dirname(__file__), 'shared_dir_tmp')
-if not os.path.exists(shared_dir): os.mkdir(shared_dir)
+# bhx_password = b'safe key' # for later use the user password
+# if you wrote right password then only you can see the data
+# TODO readonly acess for wrong password ?
 
 class CustomFileResource(FileResource):
     def __init__(self, path, environ, file_path):
-        self.bhx = BHX(key=bhx_password, use_new_key_depends_on_old_key=False, use_bcrypt=False, use_hmac=False)
+        bhx_password:str = environ['wsgidav.customauth.password']
+        self.bhx = BHX(key=bhx_password.encode(), use_new_key_depends_on_old_key=False, use_bcrypt=False, use_hmac=False)
         super().__init__(path, environ, file_path)
         
     def get_display_name(self):
@@ -54,7 +56,8 @@ class CustomFileResource(FileResource):
     
 class CustomFolderResource(FolderResource):
     def __init__(self, path, environ, file_path):
-        self.bhx = BHX(key=bhx_password, use_new_key_depends_on_old_key=False, use_bcrypt=False, use_hmac=False)
+        bhx_password:str = environ['wsgidav.customauth.password']
+        self.bhx = BHX(key=bhx_password.encode(), use_new_key_depends_on_old_key=False, use_bcrypt=False, use_hmac=False)
         super().__init__(path, environ, file_path)
 
     # def get_member_names(self) -> List[str]:
@@ -89,16 +92,17 @@ class CustomFolderResource(FolderResource):
      
 class CustomFilesystemProvider(FilesystemProvider):
     def __init__(self, root_folder, *, readonly=False, fs_opts=None):
-        self.bhx = BHX(key=bhx_password, use_new_key_depends_on_old_key=False, use_bcrypt=False, use_hmac=False)
         super().__init__(root_folder, readonly=readonly, fs_opts=fs_opts)
     def _loc_to_file_path(self, path: str, environ: dict = None):
+        bhx_password:str = environ['wsgidav.customauth.password']
+        bhx = BHX(key=bhx_password.encode(), use_new_key_depends_on_old_key=False, use_bcrypt=False, use_hmac=False)
         root_path = self.root_folder_path
         assert root_path is not None
         assert util.is_str(root_path)
         assert util.is_str(path)
         path_parts = path.strip("/").split("/")
         
-        path_parts = [encode_filename(self.bhx, part) if part != '' else part for part in path_parts]
+        path_parts = [encode_filename(bhx, part) if part != '' else part for part in path_parts]
         
         file_path = os.path.abspath(os.path.join(root_path, *path_parts))
         if not file_path.startswith(root_path):
@@ -118,20 +122,46 @@ class CustomFilesystemProvider(FilesystemProvider):
             return CustomFolderResource(path, environ, fp)
         return CustomFileResource(path, environ, fp)
 
+
+class CustomDomainController(BaseDomainController):
+    def __init__(self,  wsgidav_app, config):
+        self.realm = "CustomRealm"
+    def get_domain_realm(self, path_info, environ) -> str: return self.realm
+    def require_authentication(self, realmname, environ) -> bool: return True # Require authentication always
+    def is_realm_user(self, realmname, username, environ) -> bool: return username == "admin" # Allow only "admin"
+    def basic_auth_user(self, realmname, username, password, environ) -> bool:
+        if username != "admin": return False
+        environ["wsgidav.customauth.password"] = password
+        return True # Accept any password for admin
+    def supports_http_digest_auth(self) -> bool: return False # Use basic auth only
+
 config = {
-    "host": "0.0.0.0",
-    "port": 8080,
-    "provider_mapping": {
-        "/": CustomFilesystemProvider(shared_dir, readonly=False) # for now readonly
-        # "/": shared_dir
-    },  # Serve the current directory
-    "simple_dc": {
-        "user_mapping": {"*": True} # Anonymous access
-    },  
-    "verbose": logging.DEBUG,
+    
+    # "simple_dc": {
+    #     # "user_mapping": {"*": True} # Anonymous access
+    #     "user_mapping": {
+    #         "*": {
+    #             "admin": {"password": "adminpass"},
+    #         }
+    #     }
+    # },
+    "http_authenticator": {
+        "domain_controller": f"{__name__}.CustomDomainController",
+        "accept_basic": True,
+        "accept_digest": False,
+        "default_to_digest": False,
+        "trusted_auth_header": None,
+    },
 }
 
-def run_server():
+def run_server(shared_dir: str, readonly: bool = False, host: str = "0.0.0.0", port: int=8080, verbose: int = logging.NOTSET):
+    config["host"] = host
+    config["port"] = port
+    config["verbose"] = verbose
+    config["provider_mapping"] = {
+        "/": CustomFilesystemProvider(shared_dir, readonly=readonly) # for now readonly
+    }
+    
     app = WsgiDAVApp(config)
     server = wsgi.Server((config["host"], config["port"]), app)
 
@@ -143,4 +173,6 @@ def run_server():
         print("Server stopped.")
 
 if __name__ == "__main__":
-    run_server()
+    shared_dir = os.path.join(os.path.dirname(__file__), 'shared_dir_tmp')
+    if not os.path.exists(shared_dir): os.mkdir(shared_dir)
+    run_server(shared_dir = shared_dir)

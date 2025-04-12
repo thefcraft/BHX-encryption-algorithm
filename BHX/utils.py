@@ -87,19 +87,19 @@ class Base256toN:
 
 _default_Base256toN = Base256toN()
 def safe_encode(data: bytes) -> str:
-    return _default_Base256toN.encode(data).decode()
+    return _default_Base256toN.encode(data).decode(errors='ignore')
 def safe_decode(data: str) -> bytes:
-    return _default_Base256toN.decode(data.encode())
+    return _default_Base256toN.decode(data.encode(errors='ignore'))
 
 def encode_filename(bhx: BHX, filename: Union[str, bytes]) -> str:
-    if isinstance(filename, str): filename = filename.encode()
+    if isinstance(filename, str): filename = filename.encode(errors='ignore')
     name = bhx.encrypt(filename, use_iv=sha256(bhx.key).digest())
     return f"{safe_encode(name)}.enc"
 
 def decode_filename(bhx: BHX, filename: Union[str, bytes]) -> str:
-    if not isinstance(filename, str): filename = filename.decode()
+    if not isinstance(filename, str): filename = filename.decode(errors='ignore')
     name = safe_decode(filename.removesuffix(".enc"))
-    return bhx.decrypt(name).decode()
+    return bhx.decrypt(name).decode(errors='ignore')
 
 
 def deprecated(reason="This function is deprecated"):
