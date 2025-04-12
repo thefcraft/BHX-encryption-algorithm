@@ -1,7 +1,14 @@
 import secrets
 from hashlib import sha256
 import hmac
-import bcrypt
+try: import bcrypt
+except Exception as e: 
+    import warnings
+    warnings.warn(
+        f"bcrypt not found, Error: {e}",
+        Warning,
+        stacklevel=0
+    )
 from typing import Optional, Union
 from itertools import cycle, islice
 import numpy as np
